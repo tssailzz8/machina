@@ -96,3 +96,4 @@ Desktop.ini
 packages/
 .vs/
 *.snk
+.DS_Store
