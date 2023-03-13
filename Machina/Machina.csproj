@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
     
     <PropertyGroup>
         <TargetFramework>net7.0</TargetFramework>
@@ -12,6 +12,7 @@
         <EnableNETAnalyzers>true</EnableNETAnalyzers>
         <EnforceCodeStyleInBuild>TRUE</EnforceCodeStyleInBuild>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <NoWarn>1701;1702;IDE0073</NoWarn>
     </PropertyGroup>
     
     <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'NuGet|AnyCPU' ">
@@ -31,6 +32,7 @@
         <PackageProjectUrl>https://github.com/ravahn/machina</PackageProjectUrl>
         <PackageReadmeFile>README.md</PackageReadmeFile>
     </PropertyGroup>
+    
     <ItemGroup>
         <None Remove="Ravahn.Machina.Keyfile.snk" />
     </ItemGroup>

@@ -123,7 +123,7 @@ namespace Machina.FFXIV.Deucalion
                 {
                     File.Delete(fileName);
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
                     // do nothing - file may be locked by ffxiv process.
                 }
