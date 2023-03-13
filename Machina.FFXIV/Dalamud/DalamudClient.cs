@@ -1,9 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using Dalamud.Game.Network;
 using Machina.FFXIV.Headers;
+using System.Collections.Concurrent;
 
 namespace Machina.FFXIV.Dalamud
 {
@@ -13,6 +16,12 @@ namespace Machina.FFXIV.Dalamud
 
         public delegate void MessageReceivedHandler(long epoch, byte[] message);
         public MessageReceivedHandler MessageReceived;
+
+        private CancellationTokenSource _tokenSource;
+        private Task _monitorTask;
+        private ConcurrentQueue<(long, byte[])> _messageQueue;
+
+        private DateTime _lastLoopError;
 
         private readonly Dictionary<Server_MessageType, int> OpcodeSizes;
 
@@ -53,7 +62,55 @@ namespace Machina.FFXIV.Dalamud
 
         public void Connect()
         {
+            if (GameNetwork is null)
+            {
+                Trace.WriteLine($"DalamudClient: Dalamud GameNetwork has not been injected/set.", "DEBUG-MACHINA");
+                return;
+            }
+
+            _messageQueue = new ConcurrentQueue<(long, byte[])>();
+
             GameNetwork.NetworkMessage += GameNetworkOnNetworkMessage;
+
+            _tokenSource = new CancellationTokenSource();
+
+            _monitorTask = Task.Run(() => ProcessReadLoop(_tokenSource.Token));
+        }
+
+        private void ProcessReadLoop(CancellationToken token)
+        {
+            try
+            {
+                while (!token.IsCancellationRequested)
+                {
+                    try
+                    {
+                        while (_messageQueue.TryDequeue(out var messageInfo))
+                            OnMessageReceived(messageInfo.Item1, messageInfo.Item2);
+
+                        Task.Delay(10, token).Wait(token);
+                    }
+                    catch (OperationCanceledException)
+                    {
+
+                    }
+                    catch (Exception ex)
+                    {
+                        if (DateTime.UtcNow.Subtract(_lastLoopError).TotalSeconds > 5)
+                            Trace.WriteLine("DalamudClient: Error in inner ProcessReadLoop. " + ex.ToString(), "DEBUG-MACHINA");
+                        _lastLoopError = DateTime.UtcNow;
+                    }
+
+                }
+            }
+            catch (OperationCanceledException)
+            {
+
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine("DalamudClient: Error in outer ProcessReadLoop. " + ex.ToString(), "DEBUG-MACHINA");
+            }
         }
 
         protected unsafe void GameNetworkOnNetworkMessage(IntPtr dataPtr, ushort opcode, uint sourceActorId, uint targetActorId, NetworkMessageDirection direction)
@@ -63,10 +120,11 @@ namespace Machina.FFXIV.Dalamud
 
             var size = 0x1000;    // best effort
 
-            // if we can't map the opcode to its true size it **should** still be fine
+            // if we can't map the opcode to its true size it *should* still be fine
             if (OpcodeSizes.ContainsKey((Server_MessageType)opcode))
                 size = OpcodeSizes[(Server_MessageType)opcode];
 
+            // we don't have the original package timestamp but this seems to be close enough (+- 5ms)
             var epoch = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             dataPtr -= 0x20;
 
@@ -77,7 +135,7 @@ namespace Machina.FFXIV.Dalamud
             if (sourceActorId == 0) // no idea why this happens, probably a Dalamud bug
                 sourceActorId = targetActorId;  // in that case targetActorId seems to be what we actually want
 
-            fixed (byte* ptr = message) // fix up corrupted segment header with the fields the ACT plugin needs
+            fixed (byte* ptr = message) // fix up corrupted segment header with what we have
             {
                 Server_MessageHeader* headerPtr = (Server_MessageHeader*)ptr;
                 headerPtr->MessageLength = (uint)size;
@@ -85,7 +143,7 @@ namespace Machina.FFXIV.Dalamud
                 headerPtr->ActorID = sourceActorId;
             }
 
-            MessageReceived(epoch, message);
+            _messageQueue.Enqueue((epoch, message));
 
             reader.Close();
             stream.Close();
@@ -95,6 +153,13 @@ namespace Machina.FFXIV.Dalamud
 
         public void Disconnect()
         {
+            _tokenSource?.Cancel();
+            _tokenSource?.Dispose();
+            _tokenSource = null;
+
+            if (GameNetwork is null)
+                return;
+
             GameNetwork.NetworkMessage -= GameNetworkOnNetworkMessage;
         }
 
