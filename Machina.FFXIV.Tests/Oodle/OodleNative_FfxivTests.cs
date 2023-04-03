@@ -13,7 +13,6 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see<http://www.gnu.org/licenses/>.
 
-using Machina.FFXIV.Memory;
 using Machina.FFXIV.Oodle;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
@@ -29,7 +28,7 @@ namespace Machina.FFXIV.Tests.Oodle
         public void TestInitialize()
         {
             const string path = @"C:\Program Files (x86)\FINAL FANTASY XIV - A Realm Reborn\game\ffxiv_dx11.exe";
-            _sut = new OodleNative_Ffxiv(new SigScan());
+            _sut = new OodleNative_Ffxiv();
             _sut.Initialize(path);
         }
 
@@ -62,15 +61,6 @@ namespace Machina.FFXIV.Tests.Oodle
         public void OodleNetwork1UDP_State_SizeTest()
         {
             int result = _sut.OodleNetwork1UDP_State_Size();
-
-            Assert.IsTrue(result > 0);
-        }
-
-
-        [TestMethod()]
-        public void OodleNetwork1TCP_State_SizeTest()
-        {
-            int result = _sut.OodleNetwork1TCP_State_Size();
 
             Assert.IsTrue(result > 0);
         }
@@ -116,23 +106,6 @@ namespace Machina.FFXIV.Tests.Oodle
         }
 
         [TestMethod()]
-        public void OodleNetwork1TCP_TrainTest()
-        {
-            const int htbits = 0x13;
-            int stateSize = _sut.OodleNetwork1TCP_State_Size();
-            int sharedSize = _sut.OodleNetwork1_Shared_Size(htbits);
-
-            byte[] window = new byte[0x8000];
-            byte[] shared = new byte[sharedSize];
-            byte[] state = new byte[stateSize];
-
-            _sut.OodleNetwork1_Shared_SetWindow(shared, htbits, window, window.Length);
-            _sut.OodleNetwork1TCP_Train(state, shared, IntPtr.Zero, IntPtr.Zero, 0);
-
-            Assert.IsTrue(state[4] != 0);
-        }
-
-        [TestMethod()]
         public unsafe void OodleNetwork1UDP_DecodeTest()
         {
             const int htbits = 0x13;
@@ -166,42 +139,5 @@ namespace Machina.FFXIV.Tests.Oodle
 
             Assert.IsTrue(result);
         }
-
-
-        [TestMethod()]
-        public unsafe void OodleNetwork1TCP_DecodeTest()
-        {
-            const int htbits = 0x13;
-            int stateSize = _sut.OodleNetwork1TCP_State_Size();
-            int sharedSize = _sut.OodleNetwork1_Shared_Size(htbits);
-
-            byte[] window = new byte[0x8000];
-            byte[] shared = new byte[sharedSize];
-            byte[] state = new byte[stateSize];
-
-            _sut.OodleNetwork1_Shared_SetWindow(shared, htbits, window, window.Length);
-            _sut.OodleNetwork1TCP_Train(state, shared, IntPtr.Zero, IntPtr.Zero, 0);
-
-            byte[] source = new byte[255];
-            byte[] uncompressed = new byte[255];
-            for (byte i = 0; i < source.Length; i++) source[i] = i;
-            byte[] compressed = new byte[255];
-            bool result = _sut.OodleNetwork1TCP_Encode(state, shared, source, source.Length, compressed);
-            Assert.IsTrue(result);
-            fixed (byte* ptr = compressed)
-            {
-                result = _sut.OodleNetwork1TCP_Decode(state, shared, new IntPtr(ptr), compressed.Length, uncompressed, uncompressed.Length);
-            }
-            Assert.IsTrue(result);
-            result = true;
-
-            // compare each byte
-            for (byte i = 0; i < source.Length; i++)
-                if (source[i] != uncompressed[i])
-                    result = false;
-
-            Assert.IsTrue(result);
-        }
-
     }
 }

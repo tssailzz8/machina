@@ -1,10 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>net7.0</TargetFramework>
+        <TargetFramework>net6.0</TargetFramework>
         <Configurations>Debug;Release;NuGet</Configurations>
     </PropertyGroup>
-    
+
     <PropertyGroup>
         <Version>2.3.6.5</Version>
         <AssemblyVersion>2.3.6.5</AssemblyVersion>
@@ -15,7 +15,7 @@
         <NoWarn>1701;1702;CS0649;IDE0073</NoWarn>
         <PlatformTarget>x64</PlatformTarget>
     </PropertyGroup>
-    
+
     <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'NuGet|AnyCPU' ">
         <SignAssembly>true</SignAssembly>
         <AssemblyOriginatorKeyFile>Ravahn.Machina.Keyfile.snk</AssemblyOriginatorKeyFile>
@@ -34,7 +34,7 @@
     </PropertyGroup>
 
     <PropertyGroup>
-        <DalamudLibPath>$(appdata)\XIVLauncher\addon\Hooks\dev\</DalamudLibPath>
+        <DalamudLibPath>E:\Dalamud\addon\Hooks\7.3.3.0\</DalamudLibPath>
         <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     </PropertyGroup>
 
@@ -52,7 +52,7 @@
             <Private>false</Private>
         </Reference>
     </ItemGroup>
- 
+
     <ItemGroup>
         <None Remove="Deucalion\Distrib\deucalion-0.8.0.dll" />
         <None Remove="Deucalion\Distrib\deucalion-debug.dll" />

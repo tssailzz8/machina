@@ -17,10 +17,7 @@ namespace Machina.FFXIV.Oodle
 {
     public enum OodleImplementation
     {
-        FfxivUdp = 1,
-        LibraryUdp = 2,
-        FfxivTcp = 3,
-        LibraryTcp = 4,
-        KoreanFfxivUdp = 5
+        Ffxiv = 1,
+        Library = 2
     }
 }

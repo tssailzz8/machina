@@ -7,12 +7,18 @@ using System.Threading.Tasks;
 using Dalamud.Game.Network;
 using Machina.FFXIV.Headers;
 using System.Collections.Concurrent;
+using Dalamud.Logging;
+using Dalamud.Utility;
+using Dalamud;
+using System.Runtime.InteropServices;
+using System.Reflection.Emit;
 
 namespace Machina.FFXIV.Dalamud
 {
     public class DalamudClient : IDisposable
     {
         public static GameNetwork GameNetwork { get; set; }
+
 
         public delegate void MessageReceivedHandler(long epoch, byte[] message);
         public MessageReceivedHandler MessageReceived;
@@ -60,6 +66,7 @@ namespace Machina.FFXIV.Dalamud
             MessageReceived?.Invoke(epoch, message);
         }
 
+
         public void Connect()
         {
             if (GameNetwork is null)
@@ -67,7 +74,6 @@ namespace Machina.FFXIV.Dalamud
                 Trace.WriteLine($"DalamudClient: Dalamud GameNetwork has not been injected/set.", "DEBUG-MACHINA");
                 return;
             }
-
             _messageQueue = new ConcurrentQueue<(long, byte[])>();
 
             GameNetwork.NetworkMessage += GameNetworkOnNetworkMessage;
@@ -76,6 +82,46 @@ namespace Machina.FFXIV.Dalamud
 
             _monitorTask = Task.Run(() => ProcessReadLoop(_tokenSource.Token));
         }
+
+        private unsafe void ReplayNetworkOnNetworkMessage(long a, long b, long c)
+        {
+            var size = 0x1000;    // best effort
+            var dataAdress = (IntPtr)b;
+            var opcode = (ushort)Marshal.ReadInt16(dataAdress);
+            var dataPtr = (IntPtr)c;
+            SafeMemory.Read<UInt32>(dataAdress + 8, out var sourceID);
+            // if we can't map the opcode to its true size it *should* still be fine
+            if (OpcodeSizes.ContainsKey((Server_MessageType)opcode))
+                size = OpcodeSizes[(Server_MessageType)opcode];
+
+            // we don't have the original package timestamp but this seems to be close enough (+- 5ms)
+            var epoch = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            dataPtr -= 0x20;
+
+            var stream = new UnmanagedMemoryStream((byte*)dataPtr.ToPointer(), size);
+            var reader = new BinaryReader(stream);
+            var message = reader.ReadBytes(size);
+
+
+
+            fixed (byte* ptr = message) // fix up corrupted segment header with what we have
+            {
+                Server_MessageHeader* headerPtr = (Server_MessageHeader*)ptr;
+                headerPtr->MessageLength = (uint)size;
+                headerPtr->LoginUserID = sourceID;
+                headerPtr->ActorID = sourceID;
+                headerPtr->MessageType = opcode;
+
+            }
+
+            _messageQueue.Enqueue((epoch, message));
+
+            reader.Close();
+            stream.Close();
+            reader.Dispose();
+            stream.Dispose();
+        }
+
 
         private void ProcessReadLoop(CancellationToken token)
         {
@@ -113,7 +159,9 @@ namespace Machina.FFXIV.Dalamud
             }
         }
 
-        protected unsafe void GameNetworkOnNetworkMessage(IntPtr dataPtr, ushort opcode, uint sourceActorId, uint targetActorId, NetworkMessageDirection direction)
+
+
+            protected unsafe void GameNetworkOnNetworkMessage(IntPtr dataPtr, ushort opcode, uint sourceActorId, uint targetActorId, NetworkMessageDirection direction)
         {
             if (direction != NetworkMessageDirection.ZoneDown)
                 return;

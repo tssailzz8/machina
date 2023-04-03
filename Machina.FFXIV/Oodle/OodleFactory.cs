@@ -13,25 +13,19 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see<http://www.gnu.org/licenses/>.
 
-using Machina.FFXIV.Memory;
-
 namespace Machina.FFXIV.Oodle
 {
     public static class OodleFactory
     {
         private static IOodleNative _oodleNative;
-        private static OodleImplementation _oodleImplementation;
-
         private static readonly object _lock = new object();
 
         public static void SetImplementation(OodleImplementation implementation, string path)
         {
             lock (_lock)
             {
-                _oodleImplementation = implementation;
-
                 // Note: Do not re-initialize if not changing implementation type.
-                if (implementation == OodleImplementation.LibraryTcp || implementation == OodleImplementation.LibraryUdp)
+                if (implementation == OodleImplementation.Library)
                 {
                     if (!(_oodleNative is OodleNative_Library))
                         _oodleNative?.UnInitialize();
@@ -45,29 +39,19 @@ namespace Machina.FFXIV.Oodle
                         _oodleNative?.UnInitialize();
                     else
                         return;
-
-                    // Control signatures for Korean FFXIV Oodle implementation
-                    if (implementation == OodleImplementation.KoreanFfxivUdp)
-                        _oodleNative = new OodleNative_Ffxiv(new KoreanSigScan());
-                    else
-                        _oodleNative = new OodleNative_Ffxiv(new SigScan());
-
+                    _oodleNative = new OodleNative_Ffxiv();
                 }
                 _oodleNative.Initialize(path);
             }
         }
 
-        public static IOodleWrapper Create()
+        public static Oodle Create()
         {
             lock (_lock)
             {
                 if (_oodleNative is null)
                     return null;
-
-                if (_oodleImplementation == OodleImplementation.FfxivTcp || _oodleImplementation == OodleImplementation.LibraryTcp)
-                    return new OodleTCPWrapper(_oodleNative);
-                else
-                    return new OodleUDPWrapper(_oodleNative);
+                return new Oodle(_oodleNative);
             }
         }
     }

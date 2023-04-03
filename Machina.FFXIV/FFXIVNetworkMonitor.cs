@@ -17,7 +17,6 @@ using System;
 using System.Collections.Generic;
 using System.Net;
 using Machina.FFXIV.Dalamud;
-using Machina.FFXIV.Deucalion;
 using Machina.Infrastructure;
 
 namespace Machina.FFXIV
@@ -76,10 +75,7 @@ namespace Machina.FFXIV
         { get; set; } = new TCPNetworkMonitorConfig.RPCapConf();
 
         public Oodle.OodleImplementation OodleImplementation
-        { get; set; } = Oodle.OodleImplementation.FfxivTcp;
-
-        public bool UseDeucalion
-        { get; set; }
+        { get; set; } = Oodle.OodleImplementation.Ffxiv;
 
         public string OodlePath
         { get; set; } = @"C:\Program Files (x86)\FINAL FANTASY XIV - A Realm Reborn\game\ffxiv_dx11.exe";
@@ -109,13 +105,11 @@ namespace Machina.FFXIV
         #endregion
 
         private TCPNetworkMonitor _monitor;
-        private DeucalionClient _deucalionClient;
-        private DalamudClient _dalamudClient;
         private bool _disposedValue;
 
         private readonly Dictionary<string, FFXIVBundleDecoder> _sentDecoders = new Dictionary<string, FFXIVBundleDecoder>();
         private readonly Dictionary<string, FFXIVBundleDecoder> _receivedDecoders = new Dictionary<string, FFXIVBundleDecoder>();
-
+        private DalamudClient _dalamudClient;
         /// <summary>
         /// Validates the parameters and starts the monitor.
         /// </summary>
@@ -129,45 +123,31 @@ namespace Machina.FFXIV
 
             if (MessageReceivedEventHandler == null)
                 throw new ArgumentException("MessageReceived delegate must be specified.");
+            _dalamudClient = new DalamudClient();
+            _dalamudClient.MessageReceived = (long epoch, byte[] message) => ProcessDalamudMessage(epoch, message);
+            _dalamudClient.Connect();
+            //_monitor = new TCPNetworkMonitor();
+            //_monitor.Config.ProcessID = ProcessID;
+            //_monitor.Config.ProcessIDList = ProcessIDList;
+            //if (_monitor.Config.ProcessID == 0)
+            //    _monitor.Config.WindowName = WindowName;
+            //_monitor.Config.MonitorType = MonitorType;
+            //_monitor.Config.LocalIP = LocalIP;
+            //_monitor.Config.UseRemoteIpFilter = UseRemoteIpFilter;
+            //_monitor.Config.RPCap = RPCap;
 
-            if (UseDeucalion)
-            {
-                /*
-                if (ProcessID == 0)
-                    throw new ArgumentException("ProcessID must be specified for Deucalion.");
-                
-                string library = DeucalionInjector.ExtractLibrary();
-                DeucalionInjector.InjectLibrary((int)ProcessID, library);
+            //_monitor.DataSentEventHandler = (TCPConnection connection, byte[] data) => ProcessSentMessage(connection, data);
+            //_monitor.DataReceivedEventHandler = (TCPConnection connection, byte[] data) => ProcessReceivedMessage(connection, data);
 
-                _deucalionClient = new DeucalionClient();
-                _deucalionClient.MessageSent = (message) => ProcessDeucalionMessage(message, true);
-                _deucalionClient.MessageReceived = (message) => ProcessDeucalionMessage(message, false);
-                _deucalionClient.Connect((int)ProcessID);
-                */
+            //Oodle.OodleFactory.SetImplementation(OodleImplementation, OodlePath);
 
-                // We are replacing Deucalion with Dalamud here, while leavig the Machina.FFXIV API intact
-                _dalamudClient = new DalamudClient();
-                _dalamudClient.MessageReceived = (long epoch, byte[] message) => ProcessDalamudMessage(epoch, message);
-                _dalamudClient.Connect();
-            }
-            else
-            {
-                _monitor = new TCPNetworkMonitor();
-                _monitor.Config.ProcessID = ProcessID;
-                _monitor.Config.ProcessIDList = ProcessIDList;
-                if (_monitor.Config.ProcessID == 0)
-                    _monitor.Config.WindowName = WindowName;
-                _monitor.Config.MonitorType = MonitorType;
-                _monitor.Config.LocalIP = LocalIP;
-                _monitor.Config.UseRemoteIpFilter = UseRemoteIpFilter;
-                _monitor.Config.RPCap = RPCap;
-
-                _monitor.DataSentEventHandler = (TCPConnection connection, byte[] data) => ProcessSentMessage(connection, data);
-                _monitor.DataReceivedEventHandler = (TCPConnection connection, byte[] data) => ProcessReceivedMessage(connection, data);
-
-                Oodle.OodleFactory.SetImplementation(OodleImplementation, OodlePath);
-                _monitor.Start();
-            }
+            //_monitor.Start();
+        }
+        public void ProcessDalamudMessage(long epoch, byte[] data)
+        {
+            // TCP Connection is irrelevent for this, but needed by interface, so make new one.
+            var connection = new TCPConnection();
+            OnMessageReceived(connection, epoch, data);
         }
 
         /// <summary>
@@ -184,12 +164,6 @@ namespace Machina.FFXIV
                 _monitor = null;
             }
 
-            if (_deucalionClient != null)
-            {
-                _deucalionClient.Disconnect();
-                _deucalionClient.Dispose();
-                _deucalionClient = null;
-            }
 
             if (_dalamudClient != null)
             {
@@ -228,32 +202,6 @@ namespace Machina.FFXIV
             }
 
         }
-
-        public void ProcessDeucalionMessage(byte[] data, bool isSend)
-        {
-            // TCP Connection is irrelevent for this, but needed by interface, so make new one.
-            TCPConnection connection = new TCPConnection();
-            connection.ProcessId = ProcessID;
-
-            (long epoch, byte[] packet) = DeucalionClient.ConvertDeucalionFormatToPacketFormat(data);
-          
-            if (isSend)
-            {
-                OnMessageSent(connection, epoch, packet);
-            }
-            else
-            {
-                OnMessageReceived(connection, epoch, packet);
-            }
-        }
-
-        public void ProcessDalamudMessage(long epoch, byte[] data)
-        {
-            // TCP Connection is irrelevent for this, but needed by interface, so make new one.
-            var connection = new TCPConnection();
-            OnMessageReceived(connection, epoch, data);
-        }
-
 
         protected virtual void Dispose(bool disposing)
         {
